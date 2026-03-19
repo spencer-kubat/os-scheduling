@@ -78,6 +78,43 @@ int main(int argc, char *argv[])
     initscr();
     while (!(shared_data->all_terminated))
     {
+        uint64_t current_time = currentTime();
+        uint64_t elapsed_time = current_time - start;
+        bool all_processes_terminated = true;
+
+        //todo - mutex
+
+        for (i = 0; i < config->num_processes; i++)
+        {
+
+            Process::State process_state = processes[i]->getState();
+            if (process_state == Process::State::Terminated) continue;
+            if (process_state == Process::State::NotStarted && elapsed_time >= processes[i]->getStartTime()) 
+            {
+                processes[i]->setState(Process::State::Ready, current_time);
+                // todo - prioritize queue
+                shared_data->ready_queue.push_back(processes[i]);
+            }
+
+            // TODO - how to handle I/O burst? 
+            // call updateProcess since it has access to current_burst?
+            // or can we add a getters and setters? 
+            if (process_state == Process::State::IO)
+            {
+                //uint64_t current_burst_time_left = processes[i]->get;
+                uint64_t test = current_time - processes[i]->getBurstStartTime();
+
+            }
+
+
+
+
+        }
+
+        
+        if (all_processes_terminated) shared_data->all_terminated = true;
+
+        
         // Do the following:
         //   - Get current time
         //   - *Check if any processes need to move from NotStarted to Ready (based on elapsed time), and if so put that process in the ready queue
@@ -123,6 +160,62 @@ int main(int argc, char *argv[])
 
 void coreRunProcesses(uint8_t core_id, SchedulerData *shared_data)
 {
+
+    // todo - mutex
+
+    while (!(shared_data->all_terminated))
+    {
+        if (shared_data->ready_queue.empty())
+        {
+            //wait
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        else
+        {
+            // get process at front of queue
+            Process *current_process = shared_data->ready_queue.front();
+            shared_data->ready_queue.pop_front();
+
+            // context switch time
+            std::this_thread::sleep_for(std::chrono::milliseconds(shared_data->context_switch));
+            uint64_t current_time = currentTime(); 
+
+            bool process_running = true;
+            current_process->setState(Process::State::Running, current_time); 
+            current_process->setCpuCore(core_id);
+            current_process->setBurstStartTime(currentTime());
+
+            
+            while (process_running)
+            {
+                std::this_thread::sleep_for(std::chrono::milliseconds(5)); // do here or at end of loop?
+                current_time = currentTime();
+                current_process->updateProcess(current_time);
+
+                // Interrupted
+                if (current_process->isInterrupted())
+                {
+                    current_process->setState(Process::State::Ready, current_time);
+                    shared_data->ready_queue.push_back(current_process);
+                    // todo - update CPU burst time
+                    process_running = false;
+                }
+
+                // Terminated
+                if (current_process->getRemainingTime() <= 0) // handle this here or in updateProcess?
+                {
+                    current_process->setState(Process::State::Terminated, current_time);
+                    process_running = false;
+                }
+
+            }
+
+            // context switch time
+            std::this_thread::sleep_for(std::chrono::milliseconds(shared_data->context_switch));
+
+        }
+    }
+
     // Work to be done by each core idependent of the other cores
     // Repeat until all processes in terminated state:
     //   - *Get process at front of ready queue
