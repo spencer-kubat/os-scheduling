@@ -57,6 +57,11 @@ uint64_t Process::getBurstStartTime() const
     return burst_start_time;
 }
 
+uint32_t Process::getCurrentBurstDuration() const
+{
+    return burst_times[current_burst];
+}
+
 Process::State Process::getState() const
 {
     return state;
@@ -89,7 +94,6 @@ double Process::getCpuTime() const
 
 double Process::getTotalRunTime() const
 {
-    // I'm assuming this is supposed to be total_time instead of remain_time
     return (double)total_time / 1000.0;
 }
 

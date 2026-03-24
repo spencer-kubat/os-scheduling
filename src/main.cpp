@@ -80,6 +80,8 @@ int main(int argc, char *argv[])
     {
         uint64_t current_time = currentTime();
         uint64_t elapsed_time = current_time - start;
+        Process *lowest_priority_process_running = nullptr;
+        
         bool all_processes_terminated = true;
 
         //todo - mutex
@@ -88,7 +90,11 @@ int main(int argc, char *argv[])
         {
 
             Process::State process_state = processes[i]->getState();
+            uint64_t timeInCurrentBurst = current_time - processes[i]->getBurstStartTime();
             if (process_state == Process::State::Terminated) continue;
+            else all_processes_terminated = false;
+            
+            continue;
             if (process_state == Process::State::NotStarted && elapsed_time >= processes[i]->getStartTime()) 
             {
                 processes[i]->setState(Process::State::Ready, current_time);
@@ -96,19 +102,39 @@ int main(int argc, char *argv[])
                 shared_data->ready_queue.push_back(processes[i]);
             }
 
-            // TODO - how to handle I/O burst? 
-            // call updateProcess since it has access to current_burst?
-            // or can we add a getters and setters? 
             if (process_state == Process::State::IO)
             {
-                //uint64_t current_burst_time_left = processes[i]->get;
-                uint64_t test = current_time - processes[i]->getBurstStartTime();
+                if (timeInCurrentBurst >= processes[i]->getCurrentBurstDuration())
+                {
+                    processes[i]->setState(Process::State::Ready, current_time);
+                    // todo - update current_burst and prioritize queue
+                    shared_data->ready_queue.push_back(processes[i]);
+                }
 
             }
 
+            // RR AND Time slice finished
+            if (shared_data->algorithm == ScheduleAlgorithm::RR && process_state == Process::State::Running
+                && timeInCurrentBurst >= shared_data->time_slice)
+            {
+                processes[i]->interrupt();
+            }
 
+            // find the lowest priority of all running processes (if any and if algorithm is PP)
+            if (shared_data->algorithm == ScheduleAlgorithm::PP && process_state == Process::State::Running 
+                && (lowest_priority_process_running == nullptr || processes[i]->getPriority() > lowest_priority_process_running->getPriority()))
+            {
+                lowest_priority_process_running = processes[i];
+            }
+        }
 
-
+        // if higher priority in ready queue, interrupt lowest priority process running
+        if (shared_data->algorithm == ScheduleAlgorithm::PP 
+            && !shared_data->ready_queue.empty() 
+            && lowest_priority_process_running != nullptr 
+            && shared_data->ready_queue.front()->getPriority() < lowest_priority_process_running->getPriority())
+        {
+            lowest_priority_process_running->interrupt();
         }
 
         
@@ -167,7 +193,7 @@ void coreRunProcesses(uint8_t core_id, SchedulerData *shared_data)
     {
         if (shared_data->ready_queue.empty())
         {
-            //wait
+            // if empty - wait
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
         }
         else
@@ -188,9 +214,26 @@ void coreRunProcesses(uint8_t core_id, SchedulerData *shared_data)
             
             while (process_running)
             {
-                std::this_thread::sleep_for(std::chrono::milliseconds(5)); // do here or at end of loop?
+                std::this_thread::sleep_for(std::chrono::milliseconds(5));
                 current_time = currentTime();
                 current_process->updateProcess(current_time);
+
+                // todo - verify order of if statements below is valid
+
+                // Terminated
+                if (current_process->getRemainingTime() <= 0) // handle this here or in updateProcess?
+                {
+                    current_process->setState(Process::State::Terminated, current_time);
+                    process_running = false;
+                }
+
+                // check if running burst finished
+                uint64_t timeInCurrentBurst = current_time - current_process->getBurstStartTime();
+                if (timeInCurrentBurst >= current_process->getCurrentBurstDuration())
+                {
+                    current_process->setState(Process::State::IO, current_time);
+                    // todo - update current_burst
+                }
 
                 // Interrupted
                 if (current_process->isInterrupted())
@@ -199,14 +242,7 @@ void coreRunProcesses(uint8_t core_id, SchedulerData *shared_data)
                     shared_data->ready_queue.push_back(current_process);
                     // todo - update CPU burst time
                     process_running = false;
-                }
-
-                // Terminated
-                if (current_process->getRemainingTime() <= 0) // handle this here or in updateProcess?
-                {
-                    current_process->setState(Process::State::Terminated, current_time);
-                    process_running = false;
-                }
+                }                
 
             }
 
