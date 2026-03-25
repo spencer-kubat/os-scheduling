@@ -51,12 +51,14 @@ int main(int argc, char *argv[])
     shared_data->time_slice = config->time_slice;
     shared_data->all_terminated = false;
 
-    // Create processes
+    // Create processes 
     uint64_t start = currentTime();
     for (i = 0; i < config->num_processes; i++)
     {
         Process *p = new Process(config->processes[i], start);
         processes.push_back(p);
+        // MAR: Error handling when queue is empty?
+
         // If process should be launched immediately, add to ready queue
         if (p->getState() == Process::State::Ready)
         {
@@ -84,17 +86,22 @@ int main(int argc, char *argv[])
         
         bool all_processes_terminated = true;
 
-        //todo - mutex
+        // MARIA: Solved the //todo - mutex
+        // Added artificial scope blocks { } around the queue modification.
+        // The closing brace forces the lock to release
+    {
+        std::lock_guard<std::mutex> lock(shared_data->queue_mutex);  
 
         for (i = 0; i < config->num_processes; i++)
         {
+            
 
             Process::State process_state = processes[i]->getState();
             uint64_t timeInCurrentBurst = current_time - processes[i]->getBurstStartTime();
             if (process_state == Process::State::Terminated) continue;
             else all_processes_terminated = false;
             
-            continue;
+            continue; // MARIA: should we delete this?
             if (process_state == Process::State::NotStarted && elapsed_time >= processes[i]->getStartTime()) 
             {
                 processes[i]->setState(Process::State::Ready, current_time);
@@ -139,7 +146,7 @@ int main(int argc, char *argv[])
 
         
         if (all_processes_terminated) shared_data->all_terminated = true;
-
+    }
         
         // Do the following:
         //   - Get current time
@@ -191,6 +198,9 @@ void coreRunProcesses(uint8_t core_id, SchedulerData *shared_data)
 
     while (!(shared_data->all_terminated))
     {
+        // MARIA: Solved the //todo - mutex
+        std::lock_guard<std::mutex> lock(shared_data->queue_mutex);
+
         if (shared_data->ready_queue.empty())
         {
             // if empty - wait
@@ -214,6 +224,7 @@ void coreRunProcesses(uint8_t core_id, SchedulerData *shared_data)
             
             while (process_running)
             {
+                
                 std::this_thread::sleep_for(std::chrono::milliseconds(5));
                 current_time = currentTime();
                 current_process->updateProcess(current_time);
@@ -232,7 +243,10 @@ void coreRunProcesses(uint8_t core_id, SchedulerData *shared_data)
                 if (timeInCurrentBurst >= current_process->getCurrentBurstDuration())
                 {
                     current_process->setState(Process::State::IO, current_time);
-                    // todo - update current_burst
+
+                    // MARIA: Solved the //todo - update current_burst
+                    // The I/O wait is finished, so we increase the index to point to the next CPU burst.
+                    current_process->increaseBurst(); 
                 }
 
                 // Interrupted
@@ -240,7 +254,14 @@ void coreRunProcesses(uint8_t core_id, SchedulerData *shared_data)
                 {
                     current_process->setState(Process::State::Ready, current_time);
                     shared_data->ready_queue.push_back(current_process);
-                    // todo - update CPU burst time
+                    
+                    // MARIA: Solved the //todo - update CPU burst time
+                    // Calculate the remaining time
+                    uint32_t remaining_time = current_process->getCurrentBurstDuration() - timeInCurrentBurst;
+
+                    // Overwrite the current burst duration with the new remaining time
+                    current_process->updateBurstTime(current_process->getCurrentBurstIndex(), remaining_time);
+
                     process_running = false;
                 }                
 

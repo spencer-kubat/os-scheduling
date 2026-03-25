@@ -37,6 +37,12 @@ Process::~Process()
     delete[] burst_times;
 }
 
+// MARIA: Getter function to retrieve the current burst index for preemption math
+uint16_t Process::getCurrentBurstIndex() const 
+{
+    return current_burst;
+}
+
 uint16_t Process::getPid() const
 {
     return pid;
@@ -154,3 +160,10 @@ void Process::updateBurstTime(int burst_idx, uint32_t new_time)
 {
     burst_times[burst_idx] = new_time;
 }
+
+// MARIA: Moves the process to its next scheduled task in the burst array
+void Process::increaseBurst(){
+    current_burst++;
+}
+
+

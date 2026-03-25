@@ -31,6 +31,9 @@ public:
     Process(ProcessDetails details, uint64_t current_time);
     ~Process();
 
+    // MARIA: Added a getter so main.cpp can safely access the private current_burst variable
+    // This allows us to use updateBurstTime() when a process gets interrupted.
+    uint16_t getCurrentBurstIndex() const;
     uint16_t getPid() const;
     uint32_t getStartTime() const;
     uint8_t getPriority() const;
@@ -44,6 +47,7 @@ public:
     double getCpuTime() const;
     double getRemainingTime() const;
     double getTotalRunTime() const;
+   
 
     void setBurstStartTime(uint64_t current_time);
     void setState(State new_state, uint64_t current_time);
@@ -53,6 +57,7 @@ public:
 
     void updateProcess(uint64_t current_time);
     void updateBurstTime(int burst_idx, uint32_t new_time);
+    void increaseBurst(); // MARIA: Added a method to increase the burst index when an I/O wait finishes
 };
 
 #endif // __PROCESS_H_
