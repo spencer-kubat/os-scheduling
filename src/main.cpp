@@ -90,10 +90,8 @@ int main(int argc, char *argv[])
         {
             std::lock_guard<std::mutex> lock(shared_data->queue_mutex);  
 
-            for (i = 0; i < config->num_processes; i++)
+            for (i = 0; i < processes.size(); i++)
             {
-                
-
                 Process::State process_state = processes[i]->getState();
                 uint64_t timeInCurrentBurst = current_time - processes[i]->getBurstStartTime();
                 if (process_state == Process::State::Terminated) continue;
@@ -110,6 +108,7 @@ int main(int argc, char *argv[])
                     if (timeInCurrentBurst >= processes[i]->getCurrentBurstDuration())
                     {
                         processes[i]->setState(Process::State::Ready, current_time);
+                        processes[i]->increaseBurst();
                         pushToReadyQueue(processes[i], shared_data);
                     }
 
@@ -237,6 +236,7 @@ void coreRunProcesses(uint8_t core_id, SchedulerData *shared_data)
                     // MARIA: Solved the //todo - update current_burst
                     // The I/O wait is finished, so we increase the index to point to the next CPU burst.
                     current_process->increaseBurst(); 
+                    current_process->setBurstStartTime(current_time);
                     process_running = false;
                 }
                 else if (current_process->isInterrupted()) // interrupted

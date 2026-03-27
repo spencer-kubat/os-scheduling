@@ -26,6 +26,7 @@ private:
     int32_t total_time;         // total CPU time for all bursts
     uint64_t launch_time;       // actual time in ms (since epoch) that process was 'launched'
     // you are welcome to add other private data fields here if you so choose
+    uint64_t last_update_time;
 
 public:
     Process(ProcessDetails details, uint64_t current_time);

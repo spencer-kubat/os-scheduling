@@ -25,6 +25,7 @@ Process::Process(ProcessDetails details, uint64_t current_time)
     wait_time = 0;
     cpu_time = 0;
     total_time = 0;
+    last_update_time = current_time;
     for (i = 0; i < num_bursts; i+=2)
     {
         total_time += burst_times[i];
@@ -119,7 +120,20 @@ void Process::setState(State new_state, uint64_t current_time)
     {
         launch_time = current_time;
     }
+
+    // if leaving ready queue to run, update how long we waited
+    if (state == State::Ready && new_state == State::Running)
+    {
+        wait_time = wait_time + (current_time - last_update_time);
+    }
+
+    // just set turn time here when state changes to terminated
+    if (new_state == State::Terminated)
+    {
+        turn_time = current_time - launch_time;
+    }
     state = new_state;
+    last_update_time = current_time;
 }
 
 void Process::setCpuCore(int8_t core_num)
@@ -141,19 +155,13 @@ void Process::updateProcess(uint64_t current_time)
 {
     // use `current_time` to update turnaround time, wait time, burst times, 
     // cpu time, and remaining time
+
     if (state == State::Running)
     {
-        
+        cpu_time = cpu_time + (current_time - last_update_time);
+        remain_time = remain_time - (current_time - last_update_time) < 0 ? 0 : remain_time - (current_time - last_update_time);
     }
-
-    if (current_time - burst_start_time >= burst_times[current_burst])
-    {
-        if (state == State::IO)
-        {
-            
-        }
-    }
-
+    last_update_time = current_time;    
 }
 
 void Process::updateBurstTime(int burst_idx, uint32_t new_time)
