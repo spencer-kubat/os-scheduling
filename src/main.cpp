@@ -176,7 +176,56 @@ int main(int argc, char *argv[])
     //     - Overall average
     //  - Average turnaround time
     //  - Average waiting time
+    
+    double total_turnaround = 0;
+    double total_wait = 0;
+    double total_cpu_time = 0;
+    std::vector<double> termination_times;
 
+    // iterate through processes to get stats
+    for (int i = 0; i < processes.size(); i++)
+    {
+        total_turnaround += processes[i]->getTurnaroundTime();
+        total_wait += processes[i]->getWaitTime();
+        total_cpu_time += processes[i]->getCpuTime();
+        
+        double arrival_time_sec = processes[i]->getStartTime() / 1000.0;
+        double term_time_sec = arrival_time_sec + processes[i]->getTurnaroundTime();
+        termination_times.push_back(term_time_sec);
+    }
+
+    double avg_turnaround_time = total_turnaround / processes.size();
+    double avg_waiting_time = total_wait / processes.size();
+
+    // cpu utilization
+    uint64_t end_time = currentTime();
+    double total_sim_time_sec = (end_time - start) / 1000.0;
+    double cpu_utilization = (total_cpu_time / (total_sim_time_sec * num_cores)) * 100.0;
+
+    // sort termination times for first and second half of throughput
+    std::sort(termination_times.begin(), termination_times.end());
+    int mid_index = processes.size() / 2;
+    
+    // calculate first and second halves
+    double time_first_half = termination_times[mid_index - 1];
+    double throughput_first_50 = mid_index / time_first_half;
+    double time_second_half = termination_times.back() - time_first_half;
+    double throughput_second_50 = (processes.size() - mid_index) / time_second_half;
+    
+    // overall average
+    double throughput_overall = processes.size() / termination_times.back();
+
+    printw("\n");    
+    printw("CPU Utilization:                            %.2f %%\n", cpu_utilization);
+    printw("Throughput (First half of processes):       %.4f procs/sec\n", throughput_first_50);
+    printw("Throughput (Second half of processes):      %.4f procs/sec\n", throughput_second_50);
+    printw("Throughput (Overall Average):               %.4f procs/sec\n", throughput_overall);
+    printw("Average Turnaround Time:                    %.2f sec\n", avg_turnaround_time);
+    printw("Average Waiting Time:                       %.2f sec\n", avg_waiting_time);
+    printw("\n");
+    printw("Press any key to exit...\n");
+    refresh();
+    getch();
 
     // Clean up before quitting program
     processes.clear();
